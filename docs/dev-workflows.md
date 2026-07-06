@@ -41,6 +41,19 @@ Engineering workflows for this repo.
 - [ ] Docs updated in the same PR as code changes
 - [ ] Only change files relevant to the task — no drive-by improvements
 
+## Backend dependencies
+
+Two requirement files, installed into the same venv:
+
+- `services/api/requirements.txt` — core API. Enough to run `pnpm test:api` (the OCR engine is mocked in tests).
+- `services/api/requirements-ml.txt` — heavy ML deps (`paddleocr` + `paddlepaddle`) for **real** OCR. The first real run downloads models (~a few hundred MB, one-time) to `~/.paddleocr`.
+
+```bash
+cd services/api && source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-ml.txt   # only when you want to run real OCR
+```
+
 ## Testing
 
 ### Test types
@@ -48,6 +61,13 @@ Engineering workflows for this repo.
 - **Integration**: HTTP handlers, B2 connectivity (`tests/`)
 - **Structural**: layering rules, import boundaries (`tests/test_structure.py`)
 - **E2E**: Playwright browser-driven smoke tests
+
+### Mocking the OCR engine
+Tests never import `paddleocr`/`paddlepaddle`. The engine adapter
+(`repo/ocr_engine.py`) imports those lazily inside functions, and the OCR
+service tests monkeypatch `ocr_engine.run_ocr`. `tests/test_ocr_engine_guard.py`
+asserts the import stays lazy and device detection returns a bool without
+network. This keeps `pnpm test:api` fast and green without the heavy install.
 
 ### Test placement
 - Backend: `services/api/tests/`
@@ -60,7 +80,7 @@ Engineering workflows for this repo.
 - Frontend lint: `pnpm lint`
 - Backend lint: `pnpm lint:api`
 - Full suite: `pnpm typecheck && pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
-- E2E: `pnpm test:e2e` (run `pnpm --filter @vibe-coding-starter-kit/web exec playwright install chromium` once first)
+- E2E: `pnpm test:e2e` (run `pnpm --filter @paddleocr-document-archive/web exec playwright install chromium` once first)
 
 ### When to run
 - After behavior change: run relevant subset

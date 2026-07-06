@@ -1,17 +1,17 @@
 "use client";
 
-import { FileIcon, HardDrive, Upload, Download } from "lucide-react";
+import { FileText, CheckCircle2, Clock, Gauge, HardDrive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
-import { useFileStats } from "@/lib/queries";
+import { useArchiveStats } from "@/lib/queries";
+import { formatConfidence } from "@/lib/utils";
 
-export function StatsCards() {
-  const { data: stats, isLoading, error, refetch } = useFileStats();
+export function ArchiveStats() {
+  const { data: stats, isLoading, error, refetch } = useArchiveStats();
 
-  // Surface fetch failures inline rather than rendering "0 files / 0 B" —
-  // that lies to the user about the bucket state when really the API is
-  // just unreachable.
+  // Surface fetch failures inline rather than rendering zeros — a zero here
+  // would lie about the archive state when the API is simply unreachable.
   if (error) {
     return (
       <Card>
@@ -23,14 +23,15 @@ export function StatsCards() {
   }
 
   const cards = [
-    { title: "Total Files", value: stats?.total_files ?? 0, icon: FileIcon },
-    { title: "Storage Used", value: stats?.total_size_human ?? "0 B", icon: HardDrive },
-    { title: "Uploads Today", value: stats?.uploads_today ?? 0, icon: Upload },
-    { title: "Total Downloads", value: stats?.total_downloads ?? 0, icon: Download },
+    { title: "Documents", value: stats?.total_documents ?? 0, icon: FileText },
+    { title: "Pages Processed", value: stats?.pages_processed ?? 0, icon: CheckCircle2 },
+    { title: "Pending", value: stats?.pending ?? 0, icon: Clock },
+    { title: "Avg Confidence", value: formatConfidence(stats?.avg_confidence), icon: Gauge },
+    { title: "Storage Used", value: stats?.storage_human ?? "0 B", icon: HardDrive },
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       {cards.map((card, i) => (
         <Card
           key={card.title}

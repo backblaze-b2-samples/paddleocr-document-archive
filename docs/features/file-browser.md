@@ -2,7 +2,11 @@
 # Feature: File Browser
 
 ## Purpose
-List, preview, download, and delete files stored in Backblaze B2.
+List, preview, download, and delete **every** file in the Backblaze B2 bucket.
+This is the unscoped, reusable full-bucket explorer. For the app-specific,
+document-scoped view over `raw-scans/` + `ocr-results/` with the OCR lifecycle
+(run / edit / delete + search), see the [Document Archive](document-archive.md)
+at `/archive`.
 
 ## Used By
 - UI: `/files` page, file browser component
@@ -69,8 +73,8 @@ List, preview, download, and delete files stored in Backblaze B2.
 - Test files: `services/api/tests/test_file_key_routes.py`, `apps/web/src/lib/api-client.test.ts`
 - Required cases: list files, empty list, file not found, presigned URL generation, delete success, delete failure
 - Quick verify command: `pnpm test:api`
-- Client route-construction tests: `pnpm --filter @vibe-coding-starter-kit/web test`
-- Full verify command: `pnpm lint && pnpm --filter @vibe-coding-starter-kit/web test && pnpm build && pnpm lint:api && pnpm test:api && pnpm check:structure`
+- Client route-construction tests: `pnpm --filter @paddleocr-document-archive/web test`
+- Full verify command: `pnpm lint && pnpm --filter @paddleocr-document-archive/web test && pnpm build && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green, no ruff violations
 
 ## Related Docs

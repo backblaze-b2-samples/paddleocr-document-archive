@@ -1,36 +1,31 @@
-<!-- last_verified: 2026-03-10 -->
+<!-- last_verified: 2026-07-06 -->
 # Architecture
 
 ## Components
 
 - **apps/web/** — Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
-  - Dashboard with stats, upload chart, recent uploads
-  - File upload with drag-and-drop, progress tracking
-  - File browser with preview, download, delete
-  - Dark mode via `next-themes`
+  - Dashboard with OCR-archive metrics + throughput chart
+  - Ingest form (scan dropzone + OCR config)
+  - Scoped Archive explorer (`/archive`) + document detail (`/archive/[docId]`)
+  - Full-bucket File explorer (`/files`, kept from the starter)
 - **services/api/** — FastAPI backend (layered architecture)
-  - REST API for file upload, listing, deletion
-  - B2 S3 integration via boto3
-  - File metadata extraction (images, PDFs)
-  - Health check endpoint with B2 connectivity verification
-  - Structured JSON logging with request tracing
-  - Prometheus-format metrics endpoint
-- **packages/shared/** — TypeScript type definitions
-  - Mirrors Pydantic models from the API
-  - Consumed by `apps/web/` as workspace dependency
+  - Document lifecycle API (ingest / list / get / edit / run OCR / delete)
+  - Local OCR via PaddleOCR, isolated in `repo/ocr_engine.py`
+  - B2 S3 integration via boto3 (`repo/b2_client.py`, `repo/object_store.py`)
+  - Keyword search over a rebuildable SQLite index (`repo/index_db.py`)
+  - Health check, structured JSON logging, Prometheus-format metrics
+- **packages/shared/** — TypeScript type definitions mirroring the Pydantic models
 
 ## Backend Layering
-
-The API follows a strict layered architecture:
 
 ```
 types/     Pydantic models — no logic, no imports from other layers
   |
 config/    Settings (pydantic-settings) — depends only on types
   |
-repo/      Data access (boto3 B2 client) — no business logic
+repo/      Data access — B2 (boto3), PaddleOCR engine, SQLite index
   |
-service/   Business logic — calls repo, returns types
+service/   Business logic — orchestrates repo, returns types
   |
 runtime/   FastAPI routes — calls service, never repo directly
 ```
@@ -39,7 +34,7 @@ runtime/   FastAPI routes — calls service, never repo directly
 
 1. Dependencies flow downward only: `types` -> `config` -> `repo` -> `service` -> `runtime`
 2. No backward imports (e.g., service must not import from runtime)
-3. `boto3` only allowed in `repo/` layer
+3. `boto3` only in `repo/`; `paddleocr` / `paddlepaddle` only in `repo/ocr_engine.py` (lazy imports)
 4. All boundary data uses Pydantic models (no raw dicts across layers)
 5. Each file stays under 300 lines
 
@@ -49,68 +44,76 @@ runtime/   FastAPI routes — calls service, never repo directly
 services/api/
   main.py                  App entrypoint, middleware, router registration
   app/
-    types/                 Pydantic models (FileMetadata, UploadStats, etc.)
-    config/                Settings loaded from environment
-    repo/                  B2 S3 client (data access layer)
-    service/               Business logic (upload, files, metadata)
-    runtime/               FastAPI route handlers
-  tests/                   pytest tests (structural + integration)
+    types/                 Pydantic models (documents.py, files.py, ...)
+    config/                Settings loaded from environment (derives the S3 endpoint from B2_REGION)
+    repo/                  b2_client.py, object_store.py, ocr_engine.py, index_db.py
+    service/               documents.py, ocr.py, search.py, overlay.py, files.py, upload.py, metadata.py
+    runtime/               documents.py, search.py, files.py, upload.py, health.py, metrics.py
+  data/                    gitignored local cache (SQLite index, download counter)
+  tests/                   pytest tests (structural + behavioral; OCR engine mocked)
 ```
 
-## Boundary Invariants
+## Storage Model (B2 is the single source of truth)
 
-- **No external SDK leakage**: `boto3` is only imported in `app/repo/`. All other layers interact with B2 through the repo interface.
-- **No raw dicts at boundaries**: All data crossing layer boundaries uses typed Pydantic models.
-- **No mutable globals**: Configuration is read-only after init. No module-level mutable state shared between layers.
-- **Validated inputs**: All HTTP inputs validated by FastAPI/Pydantic. All file keys validated against prefix allowlist.
+Per document (one scanned page), identified by a sanitized `doc-id`:
+
+```
+raw-scans/<doc-id>.<ext>          the original scan
+raw-scans/<doc-id>.doc.json       config + status sidecar (collection, lang, orientation, status)
+ocr-results/<doc-id>/result.json  regions (boxes + text + confidence) + full text  [once processed]
+ocr-results/<doc-id>/overlay.png  detection boxes drawn over the scan               [once processed]
+ocr-results/<doc-id>/text.txt     searchable plain text                             [once processed]
+```
+
+The SQLite index at `services/api/data/index.db` is a **derived cache**: every
+row is reconstructable from the `text.txt` + sidecar in B2 via the reindex
+action, so the local file is disposable.
+
+## Containment of external dependencies
+
+- **boto3** is imported only in `repo/b2_client.py` and `repo/object_store.py`. `object_store` reuses the cached client from `b2_client` (extending, not replacing, the adapter).
+- **paddleocr / paddlepaddle** are imported only inside functions of `repo/ocr_engine.py`, so importing the module — and unit-testing the service layer with the engine mocked — needs no heavy install.
+- **sqlite3** (stdlib) is used only in `repo/index_db.py`.
 
 ## Deployment
 
-- **Local dev** — `pnpm dev` runs both services via `concurrently`
-  - Web: `localhost:3000`
-  - API: `localhost:8000`
-- **Railway** — two services from the same repo
-  - See `infra/railway/README.md` for configuration
-
-## Data Stores
-
-- **Backblaze B2** — object storage (S3-compatible API)
-  - All uploaded files stored in a single bucket
-  - File listing and metadata via S3 `list_objects_v2` / `head_object`
-  - No application database — B2 is the sole data store
+- **Local dev** — `pnpm dev` runs both services via `concurrently` (web `:3000`, API `:8000`).
+- **Railway** — two services from the same repo. The API image is heavier because it installs `requirements-ml.txt`. See `infra/railway/README.md`.
+- **Device selection (local OCR)** — the engine auto-detects CUDA at runtime and falls back to CPU (default). PaddlePaddle has no Apple MPS backend, so Apple Silicon runs on CPU. A GPU is never required.
 
 ## External Services
 
-- **Backblaze B2 S3 API** — file storage, retrieval, deletion, presigned URLs
+- **Backblaze B2 S3 API** — scan + artifact storage, retrieval, deletion, presigned URLs. No other external service is contacted at runtime; OCR is fully local.
 
 ## Trust Boundaries
 
 See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 
-- **Frontend -> API** — CORS-restricted to configured origins. `CORSMiddleware` is registered LAST in `main.py` (outermost) so it wraps **every** response, including uncaught-exception 500s — otherwise the browser would block error responses and the UI would only see an opaque "network error". See [docs/RELIABILITY.md](docs/RELIABILITY.md#error-handling).
-- **API -> B2** — authenticated via application keys, signature v4
-- **Client -> B2** — presigned URLs for download (10-min expiry, forced attachment)
+- **Frontend -> API** — CORS-restricted to configured origins. `CORSMiddleware` is registered LAST in `main.py` (outermost) so it wraps **every** response, including uncaught-exception 500s. See [docs/RELIABILITY.md](docs/RELIABILITY.md#error-handling).
+- **API -> B2** — authenticated via application keys, signature v4. The S3 endpoint is derived from `B2_REGION`.
+- **Client -> B2** — presigned URLs (inline for previews, attachment for downloads).
 
 ## Data Flows
 
-- **Upload**: Browser -> `POST /upload` (multipart) -> API validates -> service orchestrates -> repo writes to B2 -> metadata extracted -> response
-- **List**: Browser -> `GET /files` -> service calls repo -> returns file list
-- **Download**: Browser -> `GET /files/{key}/download` -> service validates key -> repo generates presigned URL -> browser downloads
-- **Delete**: Browser -> `DELETE /files/{key}` -> service validates key -> repo deletes from B2
+- **Ingest**: Browser -> `POST /documents` (multipart: scan + OCR config) -> service writes `raw-scans/<doc-id>` + `.doc.json` to B2 -> pending index row -> `DocumentRecord`.
+- **Run OCR**: Browser -> `POST /documents/{docId}/ocr` -> service reads scan bytes -> `repo/ocr_engine.run_ocr` (local) -> writes `result.json` + `text.txt` + `overlay.png` to B2 -> flips sidecar to processed -> upserts SQLite index -> `DocumentDetail`.
+- **Search**: Browser -> `GET /search?q=` -> SQLite keyword query -> `SearchHit[]` with snippets. `POST /search/reindex` rebuilds the index from B2.
+- **List / detail**: Browser -> `GET /documents` / `GET /documents/{docId}` -> service reads sidecars (+ result.json for detail), presigns scan/overlay.
+- **Delete**: Browser -> `DELETE /documents/{docId}` -> service deletes `raw-scans/<docId>.*` + `ocr-results/<docId>/*` (scoped to the doc-id prefix) + the index row.
 
 ## Observability
 
 - Structured JSON logging on all requests with `request_id`
-- Request timing middleware (logs duration per request; also the catch-all that converts uncaught exceptions to a typed JSON 500)
-- `/metrics` endpoint (Prometheus format: request count, latency, upload count)
-- `/health` endpoint (B2 connectivity check)
+- Request timing middleware (also the catch-all that converts uncaught exceptions to a typed JSON 500)
+- `/metrics` endpoint (Prometheus format) and `/health` endpoint (B2 connectivity)
 
 ## Canonical Files
 
-- Layered API handler: `services/api/app/runtime/upload.py`
-- Service orchestration: `services/api/app/service/upload.py`
-- B2 data access (repo layer): `services/api/app/repo/b2_client.py`
-- Pydantic models: `services/api/app/types/` (`files.py`, `upload.py`, `stats.py`, `formatting.py`)
+- OCR engine adapter (lazy paddleocr): `services/api/app/repo/ocr_engine.py`
+- SQLite index adapter: `services/api/app/repo/index_db.py`
+- Document orchestration: `services/api/app/service/documents.py`, `service/ocr.py`
+- B2 data access (repo layer): `services/api/app/repo/b2_client.py`, `repo/object_store.py`
+- Pydantic models: `services/api/app/types/documents.py`
 - Config (pydantic-settings): `services/api/app/config/settings.py`
 - Structural tests: `services/api/tests/test_structure.py`
 - Frontend API client: `apps/web/src/lib/api-client.ts`
@@ -118,10 +121,12 @@ See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 
 ## Core Features
 
-- [File Upload](docs/features/file-upload.md)
+- [Document Ingest](docs/features/document-ingest.md)
+- [OCR Recognition](docs/features/ocr-recognition.md)
+- [Document Archive](docs/features/document-archive.md)
+- [Full-Text Search](docs/features/full-text-search.md)
 - [File Browser](docs/features/file-browser.md)
 - [Dashboard](docs/features/dashboard.md)
-- [Metadata Extraction](docs/features/metadata-extraction.md)
 
 ## References
 

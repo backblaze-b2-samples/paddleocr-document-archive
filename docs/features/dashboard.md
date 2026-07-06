@@ -1,57 +1,58 @@
-<!-- last_verified: 2026-06-25 -->
+<!-- last_verified: 2026-07-06 -->
 # Feature: Dashboard
 
 ## Purpose
-Provide an at-a-glance overview of file storage usage and recent upload activity.
+Give an at-a-glance overview of the OCR archive: how many documents are ingested,
+how many pages have been processed, how confident recognition is, and recent
+throughput.
 
 ## Used By
 - UI: `/` page (dashboard home)
-- API: `GET /files/stats`, `GET /files`, `GET /files/stats/activity`
+- API: `GET /documents/stats`, `GET /documents/stats/activity`, `GET /documents`
 
 ## Core Functions
-- `apps/web/src/components/dashboard/stats-cards.tsx` — 4 stat cards
-- `apps/web/src/components/dashboard/recent-uploads-table.tsx` — last 10 uploads
-- `apps/web/src/components/dashboard/upload-chart.tsx` — bar chart of uploads per day
-- `apps/web/src/lib/api-client.ts` — `getFileStats()`, `getFiles()`, `getUploadActivity()`
-- `services/api/app/runtime/files.py` — `GET /files/stats` handler
-- `services/api/app/service/files.py` — `get_stats()` business logic
-- `services/api/app/repo/b2_client.py` — `get_upload_stats()` data access
+- `apps/web/src/components/dashboard/archive-stats.tsx` — 5 stat cards
+- `apps/web/src/components/dashboard/processing-chart.tsx` — bar chart of pages processed/day
+- `apps/web/src/components/dashboard/recent-runs.tsx` — last 10 processed documents
+- `apps/web/src/lib/api-client.ts` — `getArchiveStats()`, `getProcessingActivity()`, `getDocuments()`
+- `services/api/app/service/documents.py` — `archive_stats()`, `processing_activity()`
 
 ## Canonical Files
-- Dashboard page layout: `apps/web/src/components/dashboard/stats-cards.tsx`
-- Stats service logic: `services/api/app/service/files.py`
+- Stats service logic: `services/api/app/service/documents.py::archive_stats`
+- Dashboard cards: `apps/web/src/components/dashboard/archive-stats.tsx`
 
 ## Inputs
 - None (dashboard loads data automatically)
 
 ## Outputs
-- `GET /files/stats` → `UploadStats` (total_files, total_size_bytes, total_size_human, uploads_today, total_downloads)
-- `GET /files` (limit 10) → `FileMetadata[]` for recent uploads table (sorted newest-first)
-- `GET /files/stats/activity?days=7` → `DailyUploadCount[]` for chart (server-side aggregation)
+- `GET /documents/stats` → `ArchiveStats` (total_documents, processed, pending, pages_processed, avg_confidence, storage_bytes, storage_human)
+- `GET /documents/stats/activity?days=7` → `DailyProcessedCount[]` (server-side aggregation from sidecar `processed_at`)
+- `GET /documents` (last 10 processed) → recent OCR runs table
 
 ## Flow
-- Page loads → three parallel API calls (stats, recent files, upload activity)
-- Stats cards display total files, storage used, uploads today, total downloads
-- Upload chart displays server-aggregated daily counts for last 7 days as bar chart after activity data is known
-- Recent uploads table shows last 10 files with filename, size, type, date, status badge
+- Page loads → parallel queries for archive stats, processing activity, and the document list
+- Stat cards: Documents, Pages Processed, Pending, Avg Confidence, Storage Used
+- Throughput chart: pages processed per day for the last 7 days
+- Recent runs table: last 10 processed documents (filename, collection, confidence, processed date), each linking to its detail page
 
 ## Edge Cases
-- API unavailable → error states with retry where supported; activity chart does not show a false zero state while loading
-- No files uploaded → empty chart message, empty table message
-- Large file count → stats endpoint paginates through all objects using `ContinuationToken`
+- API unavailable → inline error states with retry; the chart avoids a false zero state while loading
+- No documents → empty chart + empty table messages
+- Large archive → stats paginate through B2 objects via `ContinuationToken`
 
 ## UX States
-- Loading: skeleton placeholders for cards, table, and upload activity chart
-- Empty: "No files uploaded yet" / "No upload data available yet"
+- Loading: skeletons for cards, chart, and table
+- Empty: "No processed documents yet" / "No activity yet"
 - Loaded: populated cards, chart, table
 
 ## Verification
-- Test files: `services/api/tests/test_upload_activity.py`, `services/api/tests/test_recent_files.py`
-- Required cases: stats with files, stats with empty bucket, API error fallback
+- Test files: `services/api/tests/test_documents_service.py` (stats derive from sidecars)
+- Required cases: stats with documents, stats with empty archive, activity fills missing days
 - Quick verify command: `pnpm test:api`
 - Full verify command: `pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green, no ruff violations
 
 ## Related Docs
 - [ARCHITECTURE.md](../../ARCHITECTURE.md)
+- [Document Archive](document-archive.md)
 - [App Workflows](../app-workflows.md)

@@ -26,3 +26,9 @@ export function formatDate(dateStr: string) {
     minute: "2-digit",
   });
 }
+
+/** Render an OCR confidence (0..1) as a percentage, or an em dash if absent. */
+export function formatConfidence(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  return `${(value * 100).toFixed(1)}%`;
+}

@@ -1,9 +1,15 @@
 import type {
+  ArchiveStats,
+  DailyProcessedCount,
   DailyUploadCount,
+  DocumentDetail,
+  DocumentRecord,
   FileMetadata,
   FileUploadResponse,
+  OcrConfig,
+  SearchHit,
   UploadStats,
-} from "@vibe-coding-starter-kit/shared";
+} from "@paddleocr-document-archive/shared";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -206,6 +212,99 @@ export function uploadFile(
     );
 
     xhr.open("POST", `${API_BASE}/upload`);
+    xhr.send(formData);
+  });
+}
+
+// --- Document archive (OCR) ---
+
+export async function getDocuments() {
+  return apiFetch<DocumentRecord[]>("/documents");
+}
+
+export async function getDocument(docId: string) {
+  return apiFetch<DocumentDetail>(`/documents/${encodeURIComponent(docId)}`);
+}
+
+export async function getArchiveStats() {
+  return apiFetch<ArchiveStats>("/documents/stats");
+}
+
+export async function getProcessingActivity(days = 7) {
+  return apiFetch<DailyProcessedCount[]>(`/documents/stats/activity?days=${days}`);
+}
+
+export async function runOcr(docId: string) {
+  return apiFetch<DocumentDetail>(
+    `/documents/${encodeURIComponent(docId)}/ocr`,
+    { method: "POST" }
+  );
+}
+
+export async function editDocument(docId: string, config: OcrConfig) {
+  return apiFetch<DocumentRecord>(`/documents/${encodeURIComponent(docId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+}
+
+export async function deleteDocument(docId: string) {
+  return apiFetch<{ deleted: boolean; doc_id: string }>(
+    `/documents/${encodeURIComponent(docId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function searchDocuments(q: string, limit = 50) {
+  return apiFetch<SearchHit[]>(
+    `/search?q=${encodeURIComponent(q)}&limit=${limit}`
+  );
+}
+
+export async function reindexDocuments() {
+  return apiFetch<{ reindexed: number }>("/search/reindex", { method: "POST" });
+}
+
+/** Ingest a scan (multipart) with its OCR config, reporting upload progress. */
+export function ingestDocument(
+  file: File,
+  config: OcrConfig,
+  onProgress?: (percent: number) => void
+): Promise<DocumentRecord> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("lang", config.lang);
+    formData.append("detect_orientation", String(config.detect_orientation));
+    formData.append("collection", config.collection);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText);
+          reject(new ApiError(body.detail || `Ingest failed: ${xhr.status}`, xhr.status));
+        } catch {
+          reject(new ApiError(`Ingest failed: ${xhr.status}`, xhr.status));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(networkError()));
+    xhr.addEventListener("abort", () =>
+      reject(new ApiError("Ingest aborted", 0)),
+    );
+
+    xhr.open("POST", `${API_BASE}/documents`);
     xhr.send(formData);
   });
 }

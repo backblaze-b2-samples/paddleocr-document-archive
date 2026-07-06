@@ -1,98 +1,44 @@
-<!-- last_verified: 2026-05-01 -->
-# Vibe Coding Starter Kit
+<!-- last_verified: 2026-07-06 -->
+# PaddleOCR Document Archive
 
-Stop wiring boilerplate and start building. This open-source starter kit gives vibe coders and AI coding agents a production-ready foundation — a full-stack TypeScript + Python template with a pre-built dashboard UI, file upload system, and **[Backblaze B2](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start)** cloud storage already integrated. Save thousands of tokens on setup prompts, skip the "build me a dashboard from scratch" loop, and go straight to building your app's unique features.
+Turn a pile of scanned pages into a searchable, structured archive — **without
+sending a single page to an external OCR API**. Raw scans land in
+**[Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-paddleocr-document-archive)**,
+[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) runs locally over each
+page (text detection → angle classification → recognition), and three derived
+artifacts are written back to B2 per page: a structured `result.json` (boxes +
+text + confidence), a rendered `overlay.png` for visual QA, and a searchable
+`text.txt`. A lightweight SQLite index — rebuildable entirely from those
+B2-resident artifacts — powers keyword search. **B2 is the single source of
+truth; the only credential you need is a B2 key.**
 
-**What you get out of the box:**
-- Full-stack dashboard UI (Next.js 16 + React 19 + Tailwind v4 + shadcn/ui)
-- File upload with drag-and-drop, progress tracking, and metadata extraction
-- File browser with preview, download, and delete
-- FastAPI backend with strict layered architecture and structural tests
-- Agent-optimized docs — your AI coding agent can read the repo and start contributing immediately
+Built for archivists, legal teams, and digital-preservation workflows that need
+on-device OCR over large scan collections, and as a reference for using B2 as
+the durable, S3-compatible backbone of a high-write-amplification AI workload
+(each ingested page fans out to ~4 B2 objects).
 
-## What it looks like
+## The 4-step workflow
 
-**Dashboard** — stats, upload activity, and recent uploads at a glance:
+1. **Ingest** a scan (TIFF / JPEG / PNG) → stored at `raw-scans/<doc-id>` on B2 with a config sidecar; the document starts as *pending*.
+2. **Run OCR** locally → PaddleOCR recognizes the page and writes `ocr-results/<doc-id>/{result.json, overlay.png, text.txt}` to B2; status flips to *processed*.
+3. **Search** recognized text → the SQLite keyword index returns matching pages with snippets.
+4. **Review / edit / delete** → inspect the scan next to its detection overlay, adjust OCR config for the next run, or remove the document (scan + all artifacts).
 
-![Dashboard view showing stat cards, upload activity chart, and recent uploads table](docs/images/b2-starterkit-dashboard1.png)
+## What you get
 
-**File browser** — tree view with preview, download, and delete:
-
-![File browser view showing a tree of files with hover actions](docs/images/b2-starterkit-fileview2.png)
-
-## Agent-First Architecture
-
-This repo is optimized for coding agents. Use the template, point your agent at it, and start building.
-
-The structure follows the principle that **repository knowledge is the system of record**. Anything an agent can't access in-context doesn't exist — so everything it needs to reason about the codebase is versioned, co-located, and discoverable from the repo itself.
-
-### How it works
-
-**[AGENTS.md](AGENTS.md) is the single source of truth for all coding agents.** A ~100 line entry point gives agents the repository layout, architectural invariants, commands, conventions, and pointers to deeper docs. Agent-specific files (CLAUDE.md, etc.) are thin pointers back to AGENTS.md.
-
-**Architecture is enforced mechanically, not by convention.** Layering rules, import boundaries, file size limits, and SDK containment are verified by structural tests and lints that run on every change. When rules are enforceable by code, agents follow them reliably.
-
-**The knowledge base is structured for progressive disclosure:**
-
-```
-AGENTS.md              Single source of truth — layout, invariants, commands, conventions
-ARCHITECTURE.md        System layout, layering rules, data flows
-docs/
-  features/            Feature docs (inputs, outputs, flows, edge cases)
-  app-workflows.md     User journeys
-  dev-workflows.md     Engineering workflows and testing
-  SECURITY.md          Security principles
-  RELIABILITY.md       Reliability expectations
-  exec-plans/          Execution plans and tech debt tracker
-```
-
-### Key design decisions
-
-| Principle | Implementation |
-|-----------|---------------|
-| Give agents a single source of truth | AGENTS.md ~100 lines — layout, invariants, commands, conventions |
-| Enforce invariants mechanically | Structural tests + ruff + ESLint verify boundaries |
-| DRY documentation | Each fact lives in one place; no redundant files to drift |
-| Strict layered architecture | `types -> config -> repo -> service -> runtime`, enforced by tests |
-| Prefer boring, composable libraries | stdlib logging over frameworks, Pydantic over ad-hoc validation |
-| Contain external SDKs | `boto3` only in `repo/` layer — verified by structural test |
-| Keep files agent-sized | 300-line limit per file, enforced by test |
-| Docs updated with code | Same-PR requirement prevents documentation rot |
-| Structured observability | JSON logging, `/metrics` endpoint, request tracing |
-
-This approach draws from [OpenAI's experience building with Codex](https://openai.com/index/harness-engineering/): agents work best in environments with strict boundaries, predictable structure, and progressive context disclosure.
+- **Local OCR (PaddleOCR)** — text detection, angle classification, and recognition run entirely on-device. No second API key, no per-page cost, no data egress.
+- **Scoped Archive explorer** (`/archive`) — the app's primary surface: list documents with status, confidence, collection, and a thumbnail; run OCR, view, edit, or delete each; keyword search box on top.
+- **Full-bucket File explorer** (`/files`) — the reusable B2 browse / preview / download / delete surface, kept from the starter kit.
+- **OCR overlay** — detected bounding boxes drawn over the scan and stored on B2 for visual detection QA.
+- **Keyword full-text search** — a rebuildable SQLite index over recognized text; a "Reindex" action repopulates it from B2.
+- **Archive dashboard** — documents ingested, pages processed, pending vs processed, average recognition confidence, storage used, and an OCR-throughput chart.
 
 ## Quick Start
 
-You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free **[Backblaze B2 account](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start)**.
+You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free
+**[Backblaze B2 account](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-paddleocr-document-archive)**.
 
-### Start a new project
-
-**Option 1: GitHub Template (recommended)**
-
-Click the green **"Use this template"** button at the top of this repo, name your project, then:
-
-```bash
-git clone https://github.com/yourorg/my-cool-app.git
-cd my-cool-app
-```
-
-**Option 2: Clone and reinitialize**
-
-```bash
-git clone https://github.com/backblaze-b2-samples/vibe-coding-starter-kit.git my-cool-app
-cd my-cool-app
-rm -rf .git
-git init
-git add .
-git commit -m "Initial commit from vibe-coding-starter-kit"
-```
-
-Either way you get a clean project with no upstream history — ready to push to your own repo and point your agent at it.
-
-### Setup
-
-**1. Install dependencies**
+**1. Install frontend dependencies**
 
 ```bash
 pnpm install
@@ -103,28 +49,23 @@ pnpm install
 ```bash
 cd services/api
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt           # core API (fast; OCR engine mocked in tests)
+pip install -r requirements-ml.txt        # PaddleOCR + PaddlePaddle (heavy) — for real OCR
 cd ../..
 ```
 
-**3. Add your B2 credentials**
+> The **first real OCR run** downloads the detection / recognition / angle-classification models (~a few hundred MB, one-time) to `~/.paddleocr`. That first run needs network access; OCR itself never sends your scans to any external service. On a machine with a CUDA GPU the engine uses it automatically, otherwise it runs on CPU (PaddlePaddle has no Apple MPS backend, so Apple Silicon runs on CPU).
 
-Set up your local `.env`:
+**3. Add your B2 credentials**
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` in your editor and keep it visible. Then head to the [Backblaze B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start) and:
+In the [Backblaze B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-paddleocr-document-archive):
 
-1. **Create a bucket.** B2 will show two values — paste each into `.env`:
-   - **Bucket Unique Name** → `B2_BUCKET_NAME`
-   - **Endpoint** → `B2_ENDPOINT`
-2. **Create an application key** with `Read and Write` permission. B2 will show two values — paste each into `.env`:
-   - **keyID** → `B2_KEY_ID`
-   - **applicationKey** → `B2_APPLICATION_KEY` *(only shown once — paste it now)*
-
-> Want a walkthrough? See the docs for [creating a bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets) and [creating app keys](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys).
+1. **Create a bucket** → paste its **Bucket Unique Name** into `B2_BUCKET_NAME`. Set `B2_REGION` to the bucket's region slug (e.g. `us-west-004`); the S3 endpoint is derived as `https://s3.<B2_REGION>.backblazeb2.com`.
+2. **Create an application key** with Read and Write → paste **keyID** into `B2_APPLICATION_KEY_ID` and **applicationKey** into `B2_APPLICATION_KEY` (shown once).
 
 **4. Run it**
 
@@ -132,43 +73,7 @@ Open `.env` in your editor and keep it visible. Then head to the [Backblaze B2 d
 pnpm dev
 ```
 
-That's it. Frontend at `localhost:3000`, API at `localhost:8000`. Upload a file and see it working.
-
-`pnpm dev` runs `pnpm doctor` first — a preflight check that catches the common setup gotchas (wrong Node/Python version, missing venv, missing or placeholder `.env`, ports already taken) and tells you exactly how to fix each one. Run it standalone any time with `pnpm doctor`.
-
-## Building Your App
-
-When you adapt this kit for a new app, keep the shared scaffolding and only swap out what's app-specific:
-
-- **Keep** the UI kit (`apps/web/src/components/ui/` + design tokens in `globals.css` + `/design`).
-- **Keep** the File Explorer (`/files`) and Upload (`/upload`) pages and their sidebar nav entries — they're the reusable B2-backed surface.
-- **Adapt** the Dashboard (`/`) to your use case — replace the default stats, chart, and recent uploads with metrics that reflect what your app actually does.
-- **Rebrand** by editing a single file: `apps/web/src/lib/app-config.ts` holds the app name and description (`APP_NAME`, `APP_DESCRIPTION`). Changing them there updates the page title, sidebar, and breadcrumb everywhere — no other files to touch.
-
-Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AGENTS.md#2-building-on-this-starter-kit).
-
-## Core Features
-
-- [File Upload](docs/features/file-upload.md) — drag-and-drop upload with real-time progress
-- [File Browser](docs/features/file-browser.md) — list, preview, download, delete files
-- [Dashboard](docs/features/dashboard.md) — stats cards, upload chart, recent uploads
-- [Metadata Extraction](docs/features/metadata-extraction.md) — image dimensions, EXIF, PDF info, checksums
-- [Design System](docs/design-system.md) — tokens, primitives, AI elements, the blaze generating loader, and inline `ErrorState` / `EmptyState` patterns. Live preview at `/design`.
-- Inline error handling — fetch failures surface *what's wrong* (API offline, 401, 5xx) and offer a Retry, instead of silently rendering empty state.
-- Single-source config — one `.env` at the repo root powers both API and web app, validated at startup so misconfig fails fast with a readable message.
-- Centralized data layer — every fetch goes through TanStack Query hooks in `apps/web/src/lib/queries.ts`; cache invalidation is one call after a mutation.
-- Structural tests — verify layering rules, import boundaries, SDK containment, file size limits
-- Structured JSON logging — every request traced with `request_id` and timing
-- `/health` endpoint — B2 connectivity check
-- `/metrics` endpoint — Prometheus-format counters (request count, latency, uploads)
-
-## Tech Stack
-
-- TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui, Recharts
-- TanStack Query — caching, dedup, retry, stale-while-revalidate for every fetch
-- Python 3.11+, FastAPI, boto3, Pydantic v2, Pillow, PyPDF2
-- Backblaze B2 (S3-compatible object storage)
-- pnpm workspaces (monorepo)
+Frontend at `localhost:3000`, API at `localhost:8000`. `pnpm dev` runs `pnpm doctor` first — a preflight that catches a missing venv, placeholder `.env`, wrong tool versions, and busy ports.
 
 ## Commands
 
@@ -177,12 +82,31 @@ Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AG
 | `pnpm dev` | Start frontend + backend |
 | `pnpm dev:web` | Frontend only |
 | `pnpm dev:api` | Backend only |
-| `pnpm build` | Build frontend |
+| `pnpm build` | Type-check + build frontend |
 | `pnpm lint` | Lint frontend |
 | `pnpm lint:api` | Lint backend (ruff) |
-| `pnpm test:api` | Run backend tests |
+| `pnpm test:api` | Backend tests (OCR engine is mocked — no ML install needed) |
 | `pnpm check:structure` | Verify layering rules |
-| `pnpm test:e2e` | Playwright e2e tests (run `pnpm --filter @vibe-coding-starter-kit/web exec playwright install chromium` once first) |
+| `pnpm test:e2e` | Playwright e2e tests (run `pnpm --filter @paddleocr-document-archive/web exec playwright install chromium` once first) |
+
+## Tech Stack
+
+- TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui, Recharts, TanStack Query
+- Python 3.11+, FastAPI, boto3, Pydantic v2, Pillow
+- **PaddleOCR + PaddlePaddle** (local OCR, isolated in `services/api/requirements-ml.txt`)
+- **SQLite** (stdlib) for the rebuildable keyword index
+- Backblaze B2 (S3-compatible object storage) — single source of truth
+- pnpm workspaces (monorepo)
+
+## Core Features
+
+- [Document Ingest](docs/features/document-ingest.md) — scan ingest + per-document OCR config
+- [OCR Recognition](docs/features/ocr-recognition.md) — local PaddleOCR pipeline, device autodetect, artifacts
+- [Document Archive](docs/features/document-archive.md) — scoped explorer + full document lifecycle
+- [Full-Text Search](docs/features/full-text-search.md) — SQLite keyword index + reindex from B2
+- [File Browser](docs/features/file-browser.md) — full-bucket browse / preview / download / delete
+- [Dashboard](docs/features/dashboard.md) — OCR-archive metrics and throughput
+- [Design System](docs/design-system.md) — tokens, primitives, loader, error/empty states. Live at `/design`.
 
 ## Documentation Map
 
@@ -190,21 +114,16 @@ Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AG
 |-----|---------|
 | [AGENTS.md](AGENTS.md) | Agent table of contents — start here |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System layout, layering, data flows |
-| [docs/features/](docs/features/) | Feature docs (upload, browser, dashboard, metadata) |
-| [docs/design-system.md](docs/design-system.md) | Design tokens, primitives, AI elements, loader, error/empty states |
+| [docs/features/](docs/features/) | Feature docs |
 | [docs/app-workflows.md](docs/app-workflows.md) | User journeys |
 | [docs/dev-workflows.md](docs/dev-workflows.md) | Engineering workflows and testing |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security principles |
 | [docs/RELIABILITY.md](docs/RELIABILITY.md) | Reliability expectations |
 | [docs/exec-plans/](docs/exec-plans/) | Execution plans and tech debt tracker |
 
-## Contributing
-
-Start with [AGENTS.md](AGENTS.md). It's the map — everything else is discoverable from there.
-
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.
 
 ## Claude Agent B2 Skill
 

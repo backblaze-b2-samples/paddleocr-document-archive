@@ -28,10 +28,20 @@ Reliability expectations and practices for this project.
 - `/metrics` endpoint exposes basic Prometheus-format counters
 - Upload success/failure counts tracked
 
+## Local OCR
+
+- OCR runs on-device via PaddleOCR. The engine auto-detects CUDA at runtime and falls back to CPU (default); a GPU is never required.
+- The **first** run downloads the PaddleOCR models (~a few hundred MB, one-time) to `~/.paddleocr` — this needs network. If the ML deps are not installed, the run endpoint returns a clear 503 pointing at `requirements-ml.txt`.
+
+## Rebuildable search index
+
+- The SQLite keyword index (`services/api/data/index.db`) is a **derived cache**, not a source of truth. Every row is reconstructable from the B2-resident `ocr-results/<doc-id>/text.txt` + sidecar.
+- If the index is lost or a fresh clone starts empty, the **Reindex** action (`POST /search/reindex`) rebuilds it from B2. Losing the cache never loses data.
+
 ## Graceful Degradation
 
-- File listing returns empty list (not error) when B2 has no objects
-- Metadata extraction failures don't block upload (return partial metadata)
+- Document/file listing returns an empty list (not an error) when B2 has no objects
+- Deleting a document is scoped to its `doc-id` prefix, so a failure can't cascade to other documents
 - Frontend shows skeleton states while loading, error states on failure
 
 ## Deployment

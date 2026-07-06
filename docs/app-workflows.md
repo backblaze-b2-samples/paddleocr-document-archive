@@ -1,38 +1,59 @@
-<!-- last_verified: 2026-03-10 -->
+<!-- last_verified: 2026-07-06 -->
 # App Workflows
 
 User journeys inside the application.
 
-## Upload Files
+## Ingest scans
 
-- User navigates to `/upload`
-- Drops or selects files in the dropzone
-- Client validates file size (max 100MB) and type
-- Progress bar shows per-file upload status
-- On success: toast notification, green checkmark
-- On failure: red status icon with error message
-- User can clear completed uploads
-- See: [File Upload](features/file-upload.md)
+- User navigates to `/upload` (Ingest)
+- Picks the OCR language (selector), page-orientation detection (switch), and a source collection (free-text; defaults to `general`)
+- Drops or selects one or more scans (TIFF / JPEG / PNG)
+- Each scan uploads to B2 under `raw-scans/` with a config sidecar and appears as a *pending* document
+- Per-file progress + success/error toasts
+- See: [Document Ingest](features/document-ingest.md)
 
-## Browse and Manage Files
+## Run OCR
+
+- From the Archive list row or the document detail, user clicks **Run OCR**
+- PaddleOCR runs locally (CUDA if available, otherwise CPU); the first run downloads models once
+- Three artifacts are written to B2 (`result.json`, `overlay.png`, `text.txt`), the status flips to *processed*, and the search index is updated
+- Toast reports the region count; the row/detail refreshes with confidence
+- See: [OCR Recognition](features/ocr-recognition.md)
+
+## Search recognized text
+
+- On `/archive`, user types into the search box
+- Matching processed documents appear with a text snippet, each linking to its detail
+- A **Reindex** action rebuilds the local index from the B2-resident artifacts (useful on a fresh clone)
+- See: [Full-Text Search](features/full-text-search.md)
+
+## View a document
+
+- User opens a document (`/archive/[docId]`)
+- Sees the scan next to its detection overlay, the recognized text, and per-region confidences
+- See: [Document Archive](features/document-archive.md)
+
+## Edit / re-run
+
+- User clicks **Edit** to change the OCR language, orientation, or collection used by the next run (pre-filled form; does not re-run)
+- User clicks **Run OCR** again to re-process with the updated config
+- See: [Document Archive](features/document-archive.md)
+
+## Delete a document
+
+- User clicks **Delete** and confirms
+- The scan and every `ocr-results/<docId>/*` artifact are removed from B2 (scoped to the doc-id prefix), along with the index row
+- See: [Document Archive](features/document-archive.md)
+
+## Browse the whole bucket
 
 - User navigates to `/files`
-- Page loads file list from API (sorted most recent first)
-- Files displayed in tree view with folders and type-specific icons
-- Top-level folders auto-expand on load
-- Hover a file row to see action buttons (preview / download / delete)
-- **Preview**: opens dialog with image/PDF preview + metadata panel
-- **Download**: fetches presigned URL, browser downloads file
-- **Delete**: removes file from B2, row removed from tree, toast confirms
-- Empty bucket shows "No files found" with upload prompt
+- Full-bucket tree view with preview / download / delete for every object (raw scans, OCR artifacts, and anything else)
 - See: [File Browser](features/file-browser.md)
 
-## View Dashboard
+## View the dashboard
 
-- User navigates to `/` (home)
-- Three parallel API calls load: stats, recent files, upload activity
-- Stats cards show: total files, storage used, uploads today, total downloads
-- Upload chart shows last 7 days of upload activity as bar chart
-- Recent uploads table shows last 10 files with filename, size, type, date
-- Empty state: "No files uploaded yet" messages
+- User navigates to `/`
+- Stat cards: documents, pages processed, pending, average confidence, storage used
+- OCR-throughput bar chart (pages processed per day) + a recent-runs table
 - See: [Dashboard](features/dashboard.md)

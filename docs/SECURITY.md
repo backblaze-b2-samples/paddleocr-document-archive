@@ -1,13 +1,21 @@
-<!-- last_verified: 2026-04-22 -->
+<!-- last_verified: 2026-07-06 -->
 # Security
 
-Security principles and implementation for the vibe-coding-starter-kit.
+Security principles and implementation for the paddleocr-document-archive.
+
+## Local-only OCR — no third-party data egress
+
+OCR runs entirely on-device (PaddleOCR). Scans and recognized text are **never**
+sent to any external OCR/AI API — the only network destination at runtime is
+Backblaze B2 (your bucket). The one exception is the **first** OCR run, which
+downloads the PaddleOCR models over the network to `~/.paddleocr`; no document
+data leaves the machine during that download.
 
 ## Trust Boundaries
 
-- **Frontend -> API**: CORS-restricted to configured origins, scoped to `GET/POST/DELETE/OPTIONS`
-- **API -> B2**: Authenticated via `B2_KEY_ID` + `B2_APPLICATION_KEY`, signature v4
-- **Client -> B2**: Presigned URLs for download (10-min expiry, `Content-Disposition: attachment`)
+- **Frontend -> API**: CORS-restricted to configured origins, scoped to `GET/POST/PATCH/DELETE/OPTIONS`
+- **API -> B2**: Authenticated via `B2_APPLICATION_KEY_ID` + `B2_APPLICATION_KEY`, signature v4. The S3 endpoint is derived from `B2_REGION`.
+- **Client -> B2**: Presigned URLs — inline (`Content-Disposition: inline`) for scan/overlay previews, attachment for downloads (10-min expiry)
 
 ## Upload Validation
 

@@ -1,4 +1,4 @@
-<!-- last_verified: 2026-06-25 -->
+<!-- last_verified: 2026-07-06 -->
 # AGENTS.md
 
 This is the authoritative control surface for all coding agents. Read this first.
@@ -8,28 +8,46 @@ This is the authoritative control surface for all coding agents. Read this first
 ```
 apps/web/          Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
 services/api/      FastAPI backend (layered: types/config/repo/service/runtime)
-packages/shared/   Shared TypeScript types
+  app/repo/          B2 adapter + OCR engine + SQLite index (all external SDKs here)
+    b2_client.py       S3 file-explorer adapter (boto3)
+    object_store.py    generic byte put/get/list/delete/presign for OCR artifacts (boto3)
+    ocr_engine.py      PaddleOCR adapter — the ONLY paddleocr/paddlepaddle imports (lazy)
+    index_db.py        stdlib sqlite3 keyword index (derived cache, rebuildable from B2)
+  app/service/       business logic (documents, ocr, search, overlay, files, upload, metadata)
+  app/runtime/       FastAPI routers (documents, search, files, upload, health, metrics)
+  data/              gitignored local cache (SQLite index, download counter)
+  requirements.txt        core API deps (fast install; OCR engine mocked in tests)
+  requirements-ml.txt     heavy ML deps (paddleocr + paddlepaddle) for real OCR
+packages/shared/   Shared TypeScript types (mirror the Pydantic models)
 docs/              System of record (features, workflows, security, reliability)
 docs/exec-plans/   Execution plans and tech debt tracker
 infra/railway/     Deployment config
 ```
 
-## 2. Building on This Starter Kit
+## 2. What This App Is
 
-When this repo is used as the foundation for a new app, the following pieces are part of the starter contract — keep them. Adapt only what the new use case actually requires.
+**PaddleOCR Document Archive** is a self-hosted document-digitization pipeline.
+Raw scans (TIFF/JPEG/PNG) go to Backblaze B2 under `raw-scans/`; PaddleOCR runs
+**locally** over each page and writes three derived artifacts back to B2 under
+`ocr-results/<doc-id>/` (`result.json`, `overlay.png`, `text.txt`). A SQLite
+index — rebuildable entirely from those B2 artifacts — powers keyword search.
+**B2 is the single source of truth**; the only credential required is a B2 key.
+
+This repo grew from a B2-backed starter kit. The following pieces are part of
+that reusable contract — keep them:
 
 **Keep as-is (do not strip, rename, or replace)**
-- **UI kit / design system.** `apps/web/src/components/ui/` (shadcn primitives), the design tokens in `apps/web/src/app/globals.css`, and the `/design` reference page. Build new screens with these primitives; never edit the generated `components/ui/` files directly. Restyling happens through tokens in `globals.css`.
-- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. The Files sidebar entry in `apps/web/src/components/layout/app-sidebar.tsx` stays.
-- **Upload.** `/upload` route, `apps/web/src/app/upload/`, and `apps/web/src/components/upload/`. The Upload sidebar entry stays.
-- The sidebar nav itself (Dashboard, Upload, Files, Settings, plus the Design System utility link).
+- **UI kit / design system.** `apps/web/src/components/ui/` (shadcn primitives), the design tokens in `apps/web/src/app/globals.css`, and the `/design` reference page. Build new screens with these primitives; never edit the generated `components/ui/` files directly.
+- **Full-bucket File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. This is the reusable, unscoped B2 browse/preview/download/delete surface. Its sidebar entry stays.
 
-**Adapt to the new use case**
-- **Dashboard.** `/` route and `apps/web/src/components/dashboard/` (stats cards, upload chart, recent uploads table) are illustrative defaults. Replace them with metrics, charts, and tables that reflect what the new app actually does (e.g. transcripts processed, embeddings indexed, classifications run). New aggregations must flow through the same `runtime -> service -> repo` layering and be exposed via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
-- Update `docs/features/dashboard.md` in the same PR as any dashboard change (see §9).
+**App-specific surfaces**
+- **Ingest** (`/upload`) — dropzone + OCR-config form; each scan is stored on B2 as a pending document.
+- **Archive** (`/archive`) — the app's primary working surface: a scoped explorer over `raw-scans/` + `ocr-results/` with per-document Run OCR / View / Edit / Delete and a keyword search box. Distinct from the full-bucket `/files` explorer.
+- **Document detail** (`/archive/[docId]`) — scan next to its detection overlay, recognized text, per-region confidences, and lifecycle actions.
+- **Dashboard** (`/`) — OCR-archive metrics (documents, pages processed, pending, avg confidence, storage) + an OCR-throughput chart. Update `docs/features/dashboard.md` in the same PR as any dashboard change (see §9).
 
-**Why this contract exists**
-- The UI kit, Files, and Upload pages are the reusable B2-backed scaffolding that makes this a starter kit — stripping them defeats the purpose. The dashboard is the only screen explicitly designed to be rewritten per app.
+**Why the two explorers coexist:** `/files` is the generic B2 surface; `/archive`
+is scoped to this app's folders and drives the Document lifecycle. Both ship.
 
 ## 3. Architectural Invariants
 
@@ -37,8 +55,8 @@ When this repo is used as the foundation for a new app, the following pieces are
 
 - No backward imports across layers
 - No `boto3` outside `repo/`
+- **No `paddleocr` / `paddlepaddle` outside `repo/ocr_engine.py`**, and those imports stay lazy (inside functions) so the service layer unit-tests with the engine mocked
 - No business logic in route handlers (`runtime/`)
-- All external APIs wrapped in `repo/` adapters
 - All request/response data validated at boundary (Pydantic models)
 - No shared mutable state across layers
 
@@ -66,6 +84,7 @@ When this repo is used as the foundation for a new app, the following pieces are
 | No boto3 outside repo/ | `tests/test_structure.py::test_boto3_only_in_repo` |
 | File size < 300 lines | `tests/test_structure.py::test_file_size_limits` |
 | All layers exist | `tests/test_structure.py::test_all_layers_exist` |
+| OCR engine import stays lazy | `tests/test_ocr_engine_guard.py` (no-network signature guard) |
 | No bare print() | `ruff` rule T20 |
 | Import ordering | `ruff` rule I001 |
 | Frontend strict equality | `eslint` rule eqeqeq |
@@ -79,11 +98,16 @@ pnpm dev               # start both frontend and backend
 pnpm dev:web           # frontend only
 pnpm dev:api           # backend only
 
+# Backend setup
+#   pip install -r services/api/requirements.txt       # core API — enough for tests
+#   pip install -r services/api/requirements-ml.txt    # PaddleOCR + PaddlePaddle — real OCR
+# First real OCR run downloads models (~few hundred MB) to ~/.paddleocr (one-time, needs network).
+
 # Test & Lint
 pnpm lint              # frontend lint (eslint)
 pnpm build             # frontend type check + build
 pnpm lint:api          # backend lint (ruff)
-pnpm test:api          # backend tests (pytest)
+pnpm test:api          # backend tests — OCR engine is MOCKED, no ML install needed
 pnpm check:structure   # structural boundary tests
 pnpm test:e2e          # Playwright e2e tests
 ```

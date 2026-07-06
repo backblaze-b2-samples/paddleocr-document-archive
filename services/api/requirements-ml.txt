@@ -1,0 +1,19 @@
+# Heavy ML dependencies for LOCAL OCR — installed separately from the core
+# requirements so `pnpm test:api` (which mocks the engine) stays fast and does
+# not need the large wheels. Install into the same venv when you want to run
+# real OCR:
+#
+#   cd services/api && source .venv/bin/activate && pip install -r requirements-ml.txt
+#
+# The FIRST real run downloads the detection / recognition / angle-classification
+# models (~a few hundred MB, one-time) to ~/.paddleocr — network is required for
+# that first run only. OCR itself sends nothing to any external API.
+#
+# Pinned to the PaddleOCR 2.x API (use_angle_cls / use_gpu / .ocr(..., cls=)).
+# Do NOT bump to 3.x — it renames .ocr() to .predict() and drops those kwargs.
+# The exact paddleocr/paddlepaddle wheel pair is validated end-to-end on macOS
+# arm64 at the /sample-3-verify step.
+paddleocr>=2.7,<2.10
+paddlepaddle>=2.5,<2.7
+numpy<2
+opencv-python-headless>=4.6,<5

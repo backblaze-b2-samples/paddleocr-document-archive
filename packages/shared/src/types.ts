@@ -57,3 +57,76 @@ export interface UploadStats {
   uploads_today: number;
   total_downloads: number;
 }
+
+// --- Document archive (OCR) ---
+
+export type DocumentStatus = "pending" | "processed";
+
+export interface OcrRegion {
+  text: string;
+  confidence: number;
+  box: number[][];
+}
+
+export interface OcrConfig {
+  lang: string;
+  detect_orientation: boolean;
+  collection: string;
+}
+
+export interface DocumentRecord {
+  doc_id: string;
+  filename: string;
+  ext: string;
+  collection: string;
+  status: DocumentStatus;
+  lang: string;
+  detect_orientation: boolean;
+  confidence: number | null;
+  region_count: number | null;
+  size_bytes: number;
+  size_human: string;
+  uploaded_at: string | null;
+  processed_at: string | null;
+  scan_url: string | null;
+  overlay_url: string | null;
+}
+
+export interface DocumentDetail extends DocumentRecord {
+  text: string;
+  regions: OcrRegion[];
+}
+
+export interface SearchHit {
+  doc_id: string;
+  collection: string;
+  confidence: number | null;
+  snippet: string;
+  updated_at: string | null;
+}
+
+export interface ArchiveStats {
+  total_documents: number;
+  processed: number;
+  pending: number;
+  pages_processed: number;
+  avg_confidence: number | null;
+  storage_bytes: number;
+  storage_human: string;
+}
+
+export interface DailyProcessedCount {
+  date: string;
+  processed: number;
+}
+
+// Finite set of PaddleOCR language codes surfaced in the ingest/edit selectors.
+export const OCR_LANGUAGES: { value: string; label: string }[] = [
+  { value: "en", label: "English" },
+  { value: "ch", label: "Chinese" },
+  { value: "fr", label: "French" },
+  { value: "german", label: "German" },
+  { value: "es", label: "Spanish" },
+  { value: "japan", label: "Japanese" },
+  { value: "korean", label: "Korean" },
+];
