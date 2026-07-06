@@ -23,7 +23,7 @@ as a *pending* document ready to be recognized.
 
 ## Inputs
 - file: scan image (multipart) — TIFF, JPEG, PNG, WEBP, or BMP
-- lang: OCR language code (finite set → `Select`; default `en`)
+- lang: OCR language code (`Select`; default `en`). The selector only offers languages whose recognition model is pre-baked into the offline container image (English today); offering an un-baked language would hang OCR on a model download the offline build can't complete. Add a language by baking it in `services/api/Dockerfile` and mirroring it in `OCR_LANGUAGES` (frontend) + `SUPPORTED_LANGS` (backend).
 - detect_orientation: bool (`Switch`; default on)
 - collection: free-form label (`Input`; defaults to `general` when blank)
 
@@ -43,16 +43,17 @@ as a *pending* document ready to be recognized.
 - Unsupported type (e.g. text/PDF) → 415 with a clear message
 - Empty file → 400
 - Oversized file → 413 (client + server)
-- Unsupported language → 400
+- Unsupported / un-baked language → 400 (the offline image only runs languages baked into it)
 - Duplicate filename → same `doc-id`; B2 versions the object and the sidecar is overwritten
 
 ## UX States
 - Config card with safe-default hints (English + orientation on) as `FormDescription` guidance
 - Dropzone with per-file progress rows; success/error toasts; "Clear finished"
+- On a successful ingest, a **View in Archive** button links forward to `/archive` so the user isn't left to self-navigate to run OCR
 
 ## Verification
 - Test files: `services/api/tests/test_documents_service.py`
-- Required cases: ingest creates scan + sidecar, rejects non-image, rejects empty, rejects bad language
+- Required cases: ingest creates scan + sidecar, rejects non-image, rejects empty, rejects bad language, rejects an un-baked language (e.g. `es`)
 - Quick verify command: `pnpm test:api`
 - Full verify command: `pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green, no ruff violations

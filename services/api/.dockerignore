@@ -1,0 +1,13 @@
+# Build context hygiene: keep the runtime image slim and never bake secrets.
+# Keep app/, main.py, requirements*.txt, pyproject.toml (needed at build/run).
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+# Local SQLite index + counters — a named volume provides /app/data at runtime.
+data/
+# Credentials arrive at runtime via compose env_file, never baked into the image.
+.env
+# Tests run on the host venv (mocked engine); no need in the runtime image.
+tests/

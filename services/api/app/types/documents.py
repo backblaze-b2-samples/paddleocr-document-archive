@@ -2,8 +2,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-# Supported PaddleOCR language codes surfaced in the UI selector.
-SUPPORTED_LANGS = ("en", "ch", "fr", "german", "es", "japan", "korean")
+# PaddleOCR language codes this offline build can actually run. A code is only
+# "supported" if its recognition model is pre-baked into the container image
+# (see services/api/Dockerfile) — the offline build has no network at request
+# time, so an un-baked language would make PaddleOCR hang trying to download it.
+# Today only the English model is baked. To add a language, ALSO add its
+# `PaddleOCR(lang=...)` pre-bake to the Dockerfile and mirror it in the frontend
+# OCR_LANGUAGES list (packages/shared/src/types.ts).
+SUPPORTED_LANGS = ("en",)
 
 
 class OcrConfig(BaseModel):

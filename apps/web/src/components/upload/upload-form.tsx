@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { Library } from "lucide-react";
 import type { FileRejection } from "react-dropzone";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -170,6 +172,7 @@ export function UploadForm() {
   const hasCompleted = items.some(
     (i) => i.status === "complete" || i.status === "error"
   );
+  const hasSuccess = items.some((i) => i.status === "complete");
 
   return (
     <Form {...form}>
@@ -259,7 +262,15 @@ export function UploadForm() {
             />
             <UploadProgress disabled={ingesting} items={items} onRetry={retryUpload} />
             {hasCompleted && !ingesting && (
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                {hasSuccess && (
+                  <Button asChild size="sm">
+                    <Link href="/archive">
+                      <Library className="h-3.5 w-3.5" />
+                      View in Archive
+                    </Link>
+                  </Button>
+                )}
                 <Button
                   aria-label="Clear finished ingests"
                   variant="outline"

@@ -52,6 +52,7 @@ Identified by a sanitized `doc-id`. B2 layout: `raw-scans/<doc-id>.<ext>`,
 
 ## UX States
 - Loading skeletons; inline error state with retry; empty state with an Ingest action
+- Status badge has three states: *Pending*, *Processing* (spinner shown while a Run-OCR mutation is in flight for that document — distinct from Pending), and *Processed*
 
 ## Verification
 - Test files: `services/api/tests/test_documents_service.py`

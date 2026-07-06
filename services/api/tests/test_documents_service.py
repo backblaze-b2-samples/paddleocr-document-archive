@@ -81,9 +81,9 @@ def test_list_and_get(store):
 def test_edit_updates_config_not_status(store):
     docs.ingest(b"aaa", "a.png", "image/png", OcrConfig())
     rec = docs.edit_document(
-        "a", OcrConfig(lang="fr", detect_orientation=False, collection="finance")
+        "a", OcrConfig(lang="en", detect_orientation=False, collection="finance")
     )
-    assert rec.lang == "fr"
+    assert rec.lang == "en"
     assert rec.detect_orientation is False
     assert rec.collection == "finance"
     assert rec.status == "pending"
@@ -93,6 +93,13 @@ def test_edit_rejects_bad_lang(store):
     docs.ingest(b"aaa", "a.png", "image/png", OcrConfig())
     with pytest.raises(docs.DocumentError):
         docs.edit_document("a", OcrConfig(lang="klingon"))
+
+
+def test_ingest_rejects_unavailable_lang(store):
+    # A language whose model isn't baked into the offline image is rejected at
+    # the boundary so no document is stranded in a state that would hang OCR.
+    with pytest.raises(docs.DocumentError):
+        docs.ingest(b"aaa", "a.png", "image/png", OcrConfig(lang="es"))
 
 
 def test_delete_is_scoped_to_doc_prefix(store):

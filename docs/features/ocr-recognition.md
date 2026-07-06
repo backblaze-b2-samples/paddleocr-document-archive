@@ -47,12 +47,13 @@ data egress.
 
 ## Edge Cases
 - Document not found / scan bytes missing → 404
+- Stored language not baked into the offline image → 422 with a recoverable message ("edit to English and re-run"); the engine is never invoked, so the request can't hang on a model download and the document stays pending (never stranded). Only languages in `SUPPORTED_LANGS` (`app/types/documents.py`) are baked (see `services/api/Dockerfile`).
 - OCR engine not installed → 503 with a message to install `requirements-ml.txt`
 - Page with no detected text → empty text + zero regions, still marked processed
 
 ## Verification
 - Test files: `services/api/tests/test_ocr_service.py`, `services/api/tests/test_ocr_engine_guard.py`
-- Required cases: run writes all three artifacts + flips status + upserts index (engine mocked); missing document raises; engine import stays lazy; `run_ocr` signature stable
+- Required cases: run writes all three artifacts + flips status + upserts index (engine mocked); missing document raises; un-baked stored language raises without invoking the engine; engine import stays lazy; `run_ocr` signature stable
 - Quick verify command: `pnpm test:api`
 - Full verify command: `pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green; end-to-end real OCR validated on macOS arm64 at the verify step

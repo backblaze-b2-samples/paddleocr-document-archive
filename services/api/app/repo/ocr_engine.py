@@ -48,6 +48,15 @@ def _get_engine(lang: str, detect_orientation: bool):
     which this sample pins against — do not upgrade to 3.x, whose renamed
     `.predict()` API drops these kwargs.
     """
+    # Import pyclipper BEFORE paddleocr (which imports paddle). paddlepaddle
+    # loads its own bundled zlib with global symbols; if pyclipper's C extension
+    # is first imported *after* paddle (as paddleocr's postprocess does), its
+    # decompression uses paddle's zlib and dies with
+    # "zlib.error: Error -2 while decompressing data: inconsistent stream state".
+    # Importing it first caches it in sys.modules so paddleocr's later
+    # `import pyclipper` is a no-op. Kept lazy (in-function) so the module-import
+    # guard in tests still holds. Validated 2026-07-06 in the linux/arm64 image.
+    import pyclipper  # noqa: F401
     from paddleocr import PaddleOCR
 
     use_gpu = detect_use_gpu()

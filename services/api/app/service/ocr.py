@@ -14,6 +14,7 @@ from app.repo import get_bytes, index_db, ocr_engine, put_bytes
 from app.service import documents as docs
 from app.service.overlay import draw_overlay
 from app.types import DocumentDetail
+from app.types.documents import SUPPORTED_LANGS
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,27 @@ def run_document_ocr(doc_id: str) -> DocumentDetail:
     if not sidecar:
         raise docs.DocumentNotFound()
 
+    # Guard against a document whose stored language isn't baked into this
+    # offline build (e.g. one ingested before the language list was narrowed).
+    # Running the engine on it would make PaddleOCR hang trying to download the
+    # model with no network. Fail fast with a truthful, recoverable message
+    # instead — the document stays pending and the user can edit it to a
+    # supported language and re-run.
+    lang = sidecar.get("lang", "en")
+    if lang not in SUPPORTED_LANGS:
+        raise docs.DocumentError(
+            f"OCR language '{lang}' is not available in this offline build. "
+            "Edit the document's language to English and re-run.",
+            status_code=422,
+        )
+
     scan = get_bytes(docs.scan_key(doc_id, sidecar["ext"]))
     if scan is None:
         raise docs.DocumentNotFound("Scan bytes missing for this document")
 
     regions = ocr_engine.run_ocr(
         scan,
-        lang=sidecar.get("lang", "en"),
+        lang=lang,
         detect_orientation=bool(sidecar.get("detect_orientation", True)),
     )
     text = "\n".join(r.text for r in regions)

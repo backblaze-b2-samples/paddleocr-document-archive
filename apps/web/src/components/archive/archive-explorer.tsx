@@ -193,7 +193,7 @@ export function ArchiveExplorer() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{doc.collection}</TableCell>
                       <TableCell>
-                        <StatusBadge status={doc.status} />
+                        <StatusBadge status={doc.status} processing={running} />
                       </TableCell>
                       <TableCell className="font-mono text-xs tabular-nums text-muted-foreground">
                         {formatConfidence(doc.confidence)}

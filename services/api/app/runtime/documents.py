@@ -98,6 +98,8 @@ async def run_ocr_endpoint(doc_id: str):
         return ocr_service.run_document_ocr(doc_id)
     except docs.DocumentNotFound as e:
         raise HTTPException(status_code=404, detail=e.detail) from None
+    except docs.DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from None
     except (ImportError, ModuleNotFoundError) as e:
         logger.error("OCR engine unavailable: %s", e)
         raise HTTPException(

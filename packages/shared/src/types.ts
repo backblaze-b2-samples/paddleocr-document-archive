@@ -120,13 +120,13 @@ export interface DailyProcessedCount {
   processed: number;
 }
 
-// Finite set of PaddleOCR language codes surfaced in the ingest/edit selectors.
+// PaddleOCR language codes surfaced in the ingest/edit selectors. Only expose
+// languages whose recognition model is pre-baked into the offline container
+// image (see services/api/Dockerfile) — otherwise "Run OCR" triggers a runtime
+// model download the offline build cannot complete, hanging the request. Today
+// only the English model is baked, so English is the only option offered. To
+// add a language, ALSO bake its model in the Dockerfile and add it to
+// SUPPORTED_LANGS in services/api/app/types/documents.py.
 export const OCR_LANGUAGES: { value: string; label: string }[] = [
   { value: "en", label: "English" },
-  { value: "ch", label: "Chinese" },
-  { value: "fr", label: "French" },
-  { value: "german", label: "German" },
-  { value: "es", label: "Spanish" },
-  { value: "japan", label: "Japanese" },
-  { value: "korean", label: "Korean" },
 ];

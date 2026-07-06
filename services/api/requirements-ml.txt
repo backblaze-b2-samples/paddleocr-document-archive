@@ -1,19 +1,23 @@
-# Heavy ML dependencies for LOCAL OCR — installed separately from the core
-# requirements so `pnpm test:api` (which mocks the engine) stays fast and does
-# not need the large wheels. Install into the same venv when you want to run
-# real OCR:
+# Heavy ML dependencies for OCR. These are installed into the linux/arm64
+# Docker image (see services/api/Dockerfile + the repo-root docker-compose.yml),
+# NOT natively on the host, and are kept separate from requirements.txt so
+# `pnpm test:api` (which mocks the engine) stays fast and needs none of these
+# large wheels.
 #
-#   cd services/api && source .venv/bin/activate && pip install -r requirements-ml.txt
-#
-# The FIRST real run downloads the detection / recognition / angle-classification
-# models (~a few hundred MB, one-time) to ~/.paddleocr — network is required for
-# that first run only. OCR itself sends nothing to any external API.
+# Why containerized: the macOS-arm64 paddlepaddle 2.6.2 CPU wheel hangs at 100%
+# CPU on the first kernel dispatch (validated 2026-07-06), so a native install
+# is unsupported on Apple Silicon. The linux/arm64 container dodges that wheel
+# and runs paddle natively-fast on the same Apple Silicon hardware via Colima.
+# The FIRST image build downloads and bakes the detection / recognition /
+# angle-classification models into the image (one-time; needs network at build).
+# OCR itself sends nothing to any external API.
 #
 # Pinned to the PaddleOCR 2.x API (use_angle_cls / use_gpu / .ocr(..., cls=)).
 # Do NOT bump to 3.x — it renames .ocr() to .predict() and drops those kwargs.
-# The exact paddleocr/paddlepaddle wheel pair is validated end-to-end on macOS
-# arm64 at the /sample-3-verify step.
 paddleocr>=2.7,<2.10
 paddlepaddle>=2.5,<2.7
 numpy<2
 opencv-python-headless>=4.6,<5
+# Required: paddleocr's deps otherwise pull cython 3.2.x, which makes
+# `import paddle` segfault in the Linux build. Validated in the spike.
+cython<3.1

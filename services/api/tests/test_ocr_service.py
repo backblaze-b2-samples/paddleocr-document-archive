@@ -82,3 +82,17 @@ def test_run_missing_document(monkeypatch):
     monkeypatch.setattr(docs, "read_sidecar", lambda doc_id: None)
     with pytest.raises(docs.DocumentNotFound):
         ocr_service.run_document_ocr("nope")
+
+
+def test_run_rejects_unavailable_lang(monkeypatch):
+    # A pre-existing document whose stored language isn't baked into the offline
+    # image must fail fast (no engine call, no hang) with a recoverable error.
+    stranded = dict(_SIDECAR, lang="es")
+    monkeypatch.setattr(docs, "read_sidecar", lambda doc_id: dict(stranded))
+
+    def _boom(*args, **kwargs):  # pragma: no cover - must never run
+        raise AssertionError("engine must not run for an unavailable language")
+
+    monkeypatch.setattr(ocr_service.ocr_engine, "run_ocr", _boom)
+    with pytest.raises(docs.DocumentError):
+        ocr_service.run_document_ocr("a")

@@ -1,0 +1,20 @@
+services:
+  api:
+    build:
+      context: ./services/api
+    platform: linux/arm64
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      # Pass through the dev-time CORS + port wiring exported by scripts/dev.sh
+      # so the containerized API accepts the host web origin on whatever port
+      # Next lands on. These are dev conveniences; production sets exact origins.
+      - API_CORS_ORIGINS
+      - API_CORS_ORIGIN_REGEX
+    volumes:
+      - ocr-data:/app/data
+    restart: unless-stopped
+volumes:
+  ocr-data:

@@ -10,11 +10,14 @@ User journeys inside the application.
 - Drops or selects one or more scans (TIFF / JPEG / PNG)
 - Each scan uploads to B2 under `raw-scans/` with a config sidecar and appears as a *pending* document
 - Per-file progress + success/error toasts
+- On success a **View in Archive** button appears alongside **Clear finished**, linking forward to `/archive` so the ingest → OCR journey is a single hand-off
+- The language selector only lists languages whose OCR model is baked into the offline image (English today) — see [Document Ingest](features/document-ingest.md)
 - See: [Document Ingest](features/document-ingest.md)
 
 ## Run OCR
 
 - From the Archive list row or the document detail, user clicks **Run OCR**
+- While the run is in flight the status badge reads **Processing** (a spinner, visually distinct from *Pending* and *Processed*), driven by the Run-OCR mutation's pending state
 - PaddleOCR runs locally (CUDA if available, otherwise CPU); the first run downloads models once
 - Three artifacts are written to B2 (`result.json`, `overlay.png`, `text.txt`), the status flips to *processed*, and the search index is updated
 - Toast reports the region count; the row/detail refreshes with confidence

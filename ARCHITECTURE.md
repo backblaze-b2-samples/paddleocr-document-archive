@@ -77,9 +77,9 @@ action, so the local file is disposable.
 
 ## Deployment
 
-- **Local dev** — `pnpm dev` runs both services via `concurrently` (web `:3000`, API `:8000`).
+- **Local dev** — `pnpm dev` runs both services via `concurrently`: the Next.js web app on the **host** (`:3000`) and the FastAPI OCR runtime in a **linux/arm64 Docker container** (`:8000`, see `services/api/Dockerfile` + repo-root `docker-compose.yml`). The web app talks to the container over HTTP via `NEXT_PUBLIC_API_URL`. The OCR runtime is containerized because the macOS-arm64 `paddlepaddle` CPU wheel hangs on Apple Silicon; the linux/arm64 container runs it natively-fast on the same hardware via Colima. (The host venv is still used for `pnpm test:api` / lint, which mock the engine.)
 - **Railway** — two services from the same repo. The API image is heavier because it installs `requirements-ml.txt`. See `infra/railway/README.md`.
-- **Device selection (local OCR)** — the engine auto-detects CUDA at runtime and falls back to CPU (default). PaddlePaddle has no Apple MPS backend, so Apple Silicon runs on CPU. A GPU is never required.
+- **Device selection (OCR)** — the engine auto-detects CUDA at runtime and falls back to CPU (default). PaddlePaddle has no Apple MPS backend, so the container runs on CPU. A GPU is never required.
 
 ## External Services
 

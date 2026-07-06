@@ -35,7 +35,9 @@ the durable, S3-compatible backbone of a high-write-amplification AI workload
 
 ## Quick Start
 
-You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free
+You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, **Docker** (the OCR service
+runs in a container — on macOS start it with [Colima](https://github.com/abiosoft/colima):
+`colima start`), and a free
 **[Backblaze B2 account](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-paddleocr-document-archive)**.
 
 **1. Install frontend dependencies**
@@ -44,17 +46,18 @@ You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free
 pnpm install
 ```
 
-**2. Set up the backend**
+**2. Set up the backend venv (for tests + lint)**
 
 ```bash
 cd services/api
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt           # core API (fast; OCR engine mocked in tests)
-pip install -r requirements-ml.txt        # PaddleOCR + PaddlePaddle (heavy) — for real OCR
+pip install -r requirements.txt           # core API — enough for `pnpm test:api` / lint (OCR engine mocked)
 cd ../..
 ```
 
-> The **first real OCR run** downloads the detection / recognition / angle-classification models (~a few hundred MB, one-time) to `~/.paddleocr`. That first run needs network access; OCR itself never sends your scans to any external service. On a machine with a CUDA GPU the engine uses it automatically, otherwise it runs on CPU (PaddlePaddle has no Apple MPS backend, so Apple Silicon runs on CPU).
+> The heavy OCR deps (PaddleOCR + PaddlePaddle) are **not** installed on the host
+> — they run in the Docker container (see [Running the OCR service](#running-the-ocr-service-docker) below). The host venv only needs `requirements.txt`
+> for the mocked test suite and linting.
 
 **3. Add your B2 credentials**
 
@@ -70,18 +73,40 @@ In the [Backblaze B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_
 **4. Run it**
 
 ```bash
+colima start   # start Docker (macOS) if it isn't already running
 pnpm dev
 ```
 
 Frontend at `localhost:3000`, API at `localhost:8000`. `pnpm dev` runs `pnpm doctor` first — a preflight that catches a missing venv, placeholder `.env`, wrong tool versions, and busy ports.
 
+### Running the OCR service (Docker)
+
+`pnpm dev` builds and runs the FastAPI OCR service in a **linux/arm64** container
+(the web app stays on the host and talks to it over HTTP via `NEXT_PUBLIC_API_URL`).
+**Docker is a prerequisite** — on macOS start it with `colima start`.
+
+**Why containerized:** the macOS-arm64 `paddlepaddle` CPU wheel hangs at 100% CPU
+on the first kernel dispatch on Apple Silicon. Running the exact same code in a
+linux/arm64 container (via Colima) dodges that broken wheel and executes paddle
+natively-fast on the *same* Apple Silicon hardware.
+
+- **First build takes ~5–10 min** — it installs paddle + deps and bakes the OCR
+  models into the image so the first request doesn't pay the download cost. Later
+  starts are fast.
+- The SQLite index + counters under `/app/data` persist in a named Docker volume
+  (`ocr-data`).
+- Tear the container down with `pnpm dev:api:down`.
+- Tests and lint still run on the host venv (`pnpm test:api`, `pnpm lint:api`) with
+  the OCR engine mocked — no Docker needed for those.
+
 ## Commands
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm dev` | Start frontend + backend |
+| `pnpm dev` | Start frontend (host) + OCR API (Docker container) |
 | `pnpm dev:web` | Frontend only |
-| `pnpm dev:api` | Backend only |
+| `pnpm dev:api` | OCR API only — builds + runs the linux/arm64 container |
+| `pnpm dev:api:down` | Stop + remove the OCR API container |
 | `pnpm build` | Type-check + build frontend |
 | `pnpm lint` | Lint frontend |
 | `pnpm lint:api` | Lint backend (ruff) |

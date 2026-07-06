@@ -1,4 +1,4 @@
-<!-- last_verified: 2026-06-25 -->
+<!-- last_verified: 2026-07-06 -->
 # Dev Workflows
 
 Engineering workflows for this repo.
@@ -43,16 +43,38 @@ Engineering workflows for this repo.
 
 ## Backend dependencies
 
-Two requirement files, installed into the same venv:
+Two requirement files with **two different runtimes**:
 
-- `services/api/requirements.txt` — core API. Enough to run `pnpm test:api` (the OCR engine is mocked in tests).
-- `services/api/requirements-ml.txt` — heavy ML deps (`paddleocr` + `paddlepaddle`) for **real** OCR. The first real run downloads models (~a few hundred MB, one-time) to `~/.paddleocr`.
+- `services/api/requirements.txt` — core API. Installed into the **host venv**;
+  enough to run `pnpm test:api` and `pnpm lint:api` (the OCR engine is mocked in
+  tests, so no ML wheels are needed there).
+- `services/api/requirements-ml.txt` — heavy ML deps (`paddleocr` + `paddlepaddle`)
+  for **real** OCR. Installed **only inside the Docker image**, never on the host.
 
 ```bash
+# Host venv — for tests + lint only:
 cd services/api && source .venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements-ml.txt   # only when you want to run real OCR
 ```
+
+### Real OCR runs in a Docker container
+
+The macOS-arm64 `paddlepaddle` CPU wheel hangs at 100% CPU on the first kernel
+dispatch on Apple Silicon, so real OCR is **not** run from the host venv. Instead
+the whole FastAPI service runs in a **linux/arm64** container (see
+`services/api/Dockerfile` + repo-root `docker-compose.yml`), which executes paddle
+natively-fast on the same hardware via Colima. `requirements-ml.txt` is installed
+and the OCR models are baked in at image-build time.
+
+```bash
+colima start                 # start Docker on macOS if it isn't running
+pnpm dev                     # web on the host + OCR API in the container
+pnpm dev:api                 # OCR API container only (builds on first run, ~5–10 min)
+pnpm dev:api:down            # stop + remove the container
+```
+
+The container mounts a named volume (`ocr-data`) at `/app/data` so the SQLite
+index + download counter survive restarts.
 
 ## Testing
 

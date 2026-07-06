@@ -102,7 +102,7 @@ export function DocumentDetail({ docId }: { docId: string }) {
           <div className="min-w-0">
             <h1 className="page-title break-all">{doc.filename}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <StatusBadge status={doc.status} />
+              <StatusBadge status={doc.status} processing={runMutation.isPending} />
               <span>Collection: {doc.collection}</span>
               <span>Language: {doc.lang}</span>
               <span>Confidence: {formatConfidence(doc.confidence)}</span>
