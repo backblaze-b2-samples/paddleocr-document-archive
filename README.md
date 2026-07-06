@@ -17,6 +17,28 @@ on-device OCR over large scan collections, and as a reference for using B2 as
 the durable, S3-compatible backbone of a high-write-amplification AI workload
 (each ingested page fans out to ~4 B2 objects).
 
+## What it looks like
+
+**Dashboard** — archive metrics (documents, pages processed, pending, average recognition confidence, storage used), a 7-day OCR-throughput chart, and the most recent OCR runs.
+
+![Dashboard with OCR-archive metrics, throughput chart, and recent runs](docs/images/dashboard.png)
+
+**Archive** — the scoped explorer listing every scanned document with its collection, status, and recognition confidence, plus per-document Run OCR / view / edit / delete and a keyword search box.
+
+![Archive explorer listing scanned documents with status and confidence](docs/images/archive.png)
+
+**Document detail** — the scan beside its PaddleOCR detection overlay, the recognized full text, and per-region confidence scores.
+
+![Document detail showing the scan, detection overlay, recognized text, and per-region confidence](docs/images/document-detail.png)
+
+**Keyword search** — searching recognized text opens a results panel with matching pages and highlighted snippets, served from the rebuildable B2-backed index.
+
+![Archive keyword search returning matching pages with text snippets](docs/images/archive-search.png)
+
+**Ingest** — a dropzone plus per-scan OCR configuration (language, page-orientation detection, and a collection label) for adding new pages to the archive.
+
+![Ingest page with OCR configuration form and a drag-and-drop upload zone](docs/images/upload.png)
+
 ## The 4-step workflow
 
 1. **Ingest** a scan (TIFF / JPEG / PNG) → stored at `raw-scans/<doc-id>` on B2 with a config sidecar; the document starts as *pending*.
